@@ -177,10 +177,17 @@ export function LiveChatWidget() {
       );
       return { prev };
     },
-    onError: (_e, _id, ctx) => {
+    onError: (err, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(CHAT_CONVERSATIONS_KEY, ctx.prev);
+      toast.error(err instanceof Error ? err.message : "Failed to delete conversation");
     },
-    onSettled: refreshConversations,
+    onSuccess: () => {
+      toast.success("Conversation deleted");
+    },
+    onSettled: () => {
+      setPendingHideConvId(null);
+      refreshConversations();
+    },
   });
 
   const deleteMsgMut = useMutation({
