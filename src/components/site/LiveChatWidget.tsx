@@ -14,9 +14,27 @@ import {
   Bot,
   Sparkles,
   Trash2,
+  MoreVertical,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   getChatSettings,
   listMyConversations,
@@ -25,10 +43,12 @@ import {
   userSendMessage,
   userMarkRead,
   userHideConversation,
+  userDeleteMessage,
   type ChatConversation,
   type ChatMessage,
   type ChatSettings,
 } from "@/lib/live-chat.functions";
+
 
 const LAUNCHER_ICONS: Record<string, LucideIcon> = {
   "message-circle": MessageCircle,
