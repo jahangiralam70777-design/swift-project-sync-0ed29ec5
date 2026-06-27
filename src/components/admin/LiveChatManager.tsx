@@ -376,7 +376,7 @@ export function LiveChatManager() {
             {conversations.map((c: ChatConversation) => (
               <li key={c.id}>
                 <button
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => openConversation(c.id)}
                   className={`w-full border-b border-border px-3 py-3 text-left transition hover:bg-muted/50 ${
                     selectedId === c.id ? "bg-muted/70" : ""
                   }`}
