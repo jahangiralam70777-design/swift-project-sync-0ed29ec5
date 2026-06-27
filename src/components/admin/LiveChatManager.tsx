@@ -201,7 +201,7 @@ export function LiveChatManager() {
           filter: `conversation_id=eq.${selectedId}`,
         },
         (payload) => {
-          const m = (payload as { new?: ChatMessage }).new;
+          const m = (payload as unknown as { new?: ChatMessage }).new;
           if (!m || m.sender_type !== "user") return;
           if (document.visibilityState !== "visible") return;
           markReadFn({ data: { conversation_id: selectedId } }).catch(() => undefined);
