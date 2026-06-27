@@ -726,11 +726,34 @@ export function LiveChatWidget() {
 
                 {(messagesQ.data ?? []).map((m) => {
                   const isUser = m.sender_type === "user";
+                  const isOwn = isUser && !!userId && m.sender_user_id === userId;
                   return (
                     <div
                       key={m.id}
-                      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                      className={`group/msg flex items-start gap-1 ${isUser ? "justify-end" : "justify-start"}`}
                     >
+                      {isOwn && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label="Message options"
+                            className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted focus:opacity-100 group-hover/msg:opacity-100 data-[state=open]:opacity-100 sm:opacity-0"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" side="top">
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                setPendingDeleteId(m.id);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                       <div
                         className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                           isUser
@@ -753,6 +776,37 @@ export function LiveChatWidget() {
                   );
                 })}
               </div>
+
+              <AlertDialog
+                open={pendingDeleteId !== null}
+                onOpenChange={(o) => {
+                  if (!o && !deleteMsgMut.isPending) setPendingDeleteId(null);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently remove the message for everyone in this conversation.
+                      This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleteMsgMut.isPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={deleteMsgMut.isPending}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (pendingDeleteId) deleteMsgMut.mutate(pendingDeleteId);
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMsgMut.isPending ? "Deleting…" : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
 
               <div className="border-t border-border bg-card px-3 py-2">
                 <div className="flex items-end gap-2">
