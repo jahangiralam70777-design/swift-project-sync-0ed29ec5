@@ -1,5 +1,5 @@
 import { getRoleDisplayName } from "@/lib/role-display";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -171,18 +171,46 @@ export function LiveChatManager() {
     };
   }, [qc, selectedId]);
 
-  // Auto-select first conversation
-  useEffect(() => {
-    if (!selectedId && convsQ.data && convsQ.data.length > 0) {
-      setSelectedId(convsQ.data[0].id);
-    }
-  }, [convsQ.data, selectedId]);
+  // Mark a conversation as read only when the staff member explicitly opens it,
+  // not on auto-select or background renders. Do NOT auto-select the first
+  // conversation, and do NOT call markRead inside an effect that re-fires on
+  // realtime invalidations — both caused student messages to flip to "Seen"
+  // without staff ever viewing them.
+  const openConversation = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      markReadFn({ data: { conversation_id: id } }).catch(() => undefined);
+    },
+    [markReadFn],
+  );
 
-  // Mark read on open
+  // When the staff member is actively viewing a conversation and a new student
+  // message arrives, mark it read — but only if the page is currently visible.
   useEffect(() => {
-    if (selectedId) {
-      markReadFn({ data: { conversation_id: selectedId } }).catch(() => undefined);
-    }
+    if (!selectedId) return;
+    if (typeof document === "undefined") return;
+    if (document.visibilityState !== "visible") return;
+    const ch = supabase
+      .channel(`admin-lc-active-read-${selectedId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "live_chat_messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        (payload) => {
+          const m = (payload as unknown as { new?: ChatMessage }).new;
+          if (!m || m.sender_type !== "user") return;
+          if (document.visibilityState !== "visible") return;
+          markReadFn({ data: { conversation_id: selectedId } }).catch(() => undefined);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [selectedId, markReadFn]);
 
   // Scroll to bottom
@@ -348,7 +376,7 @@ export function LiveChatManager() {
             {conversations.map((c: ChatConversation) => (
               <li key={c.id}>
                 <button
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => openConversation(c.id)}
                   className={`w-full border-b border-border px-3 py-3 text-left transition hover:bg-muted/50 ${
                     selectedId === c.id ? "bg-muted/70" : ""
                   }`}
@@ -862,7 +890,7 @@ export function LiveChatManager() {
                   {previousConvs.map((p) => (
                     <li key={p.id}>
                       <button
-                        onClick={() => setSelectedId(p.id)}
+                        onClick={() => openConversation(p.id)}
                         className="block w-full rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted/50"
                       >
                         <div className="flex items-center justify-between gap-1">
