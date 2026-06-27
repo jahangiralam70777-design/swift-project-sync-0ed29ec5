@@ -182,6 +182,29 @@ export function LiveChatWidget() {
     onSettled: refreshConversations,
   });
 
+  const deleteMsgMut = useMutation({
+    mutationFn: (message_id: string) => deleteMsg({ data: { message_id } }),
+    onMutate: async (message_id: string) => {
+      const key = ["chat", "messages", activeConvId] as const;
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<ChatMessage[]>(key);
+      qc.setQueryData<ChatMessage[]>(key, (old) => (old ?? []).filter((m) => m.id !== message_id));
+      return { prev, key };
+    },
+    onError: (err, _id, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ctx.key, ctx.prev);
+      toast.error(err instanceof Error ? err.message : "Failed to delete message");
+    },
+    onSuccess: () => {
+      toast.success("Message deleted");
+      refreshConversations();
+    },
+    onSettled: () => {
+      setPendingDeleteId(null);
+    },
+  });
+
+
   // Auth gate
   useEffect(() => {
     let alive = true;
