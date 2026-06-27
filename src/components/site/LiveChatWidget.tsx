@@ -898,6 +898,42 @@ export function LiveChatWidget() {
           )}
         </button>
       )}
+
+      <AlertDialog
+        open={pendingHideConvId !== null}
+        onOpenChange={(o) => {
+          if (!o && !hideMut.isPending) setPendingHideConvId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the conversation from your chat list only. Our support team will
+              still have access to the conversation history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={hideMut.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={hideMut.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const id = pendingHideConvId;
+                if (!id) return;
+                if (activeConvId === id) {
+                  setActiveConvId(null);
+                  setView("picker");
+                }
+                hideMut.mutate(id);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {hideMut.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
