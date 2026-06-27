@@ -376,7 +376,26 @@ export function LiveChatWidget() {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "live_chat_messages" },
+        (payload) => {
+          const oldRow = payload.old as Partial<ChatMessage> | null;
+          const deletedId = oldRow?.id;
+          if (!deletedId) return;
+          // Remove from any cached thread we have.
+          const caches = qc.getQueriesData<ChatMessage[]>({ queryKey: ["chat", "messages"] });
+          for (const [key, data] of caches) {
+            if (!data) continue;
+            if (data.some((m) => m.id === deletedId)) {
+              qc.setQueryData<ChatMessage[]>(key, data.filter((m) => m.id !== deletedId));
+            }
+          }
+          refreshConversations();
+        },
+      )
       .subscribe();
+
     return () => {
       supabase.removeChannel(ch);
     };
