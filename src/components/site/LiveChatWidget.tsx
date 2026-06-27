@@ -614,27 +614,32 @@ export function LiveChatWidget() {
                             )}
                           </div>
                         </button>
-                        <button
-                          type="button"
-                          aria-label="Delete conversation"
-                          title="Delete conversation"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (hideMut.isPending) return;
-                            const ok = window.confirm(
-                              "Delete this conversation?",
-                            );
-                            if (!ok) return;
-                            if (activeConvId === c.id) {
-                              setActiveConvId(null);
-                              setView("picker");
-                            }
-                            hideMut.mutate(c.id);
-                          }}
-                          className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-red-500/10 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+                        <div
+                          className="absolute right-2 top-2"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              aria-label="Conversation options"
+                              title="Conversation options"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none data-[state=open]:bg-muted"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" side="bottom">
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  setPendingHideConvId(c.id);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete conversation
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </li>
                     );
                   })}
