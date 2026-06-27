@@ -890,7 +890,7 @@ export function LiveChatManager() {
                   {previousConvs.map((p) => (
                     <li key={p.id}>
                       <button
-                        onClick={() => setSelectedId(p.id)}
+                        onClick={() => openConversation(p.id)}
                         className="block w-full rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted/50"
                       >
                         <div className="flex items-center justify-between gap-1">
