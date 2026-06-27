@@ -910,6 +910,44 @@ export const adminDeleteMessage = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ----- User-side delete: a user may delete only their OWN messages -----
+// (sender_type='user' AND sender_user_id = context.userId). Staff/admin deletes
+// continue to go through adminDeleteMessage above.
+const userDeleteMessageSchema = z.object({ message_id: z.string().uuid() });
+export const userDeleteMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => userDeleteMessageSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: msg, error: loadErr } = await asAny(supabaseAdmin)
+      .from("live_chat_messages")
+      .select("id, sender_type, sender_user_id, attachments, conversation_id")
+      .eq("id", data.message_id)
+      .maybeSingle();
+    if (loadErr) throw new Error(loadErr.message);
+    if (!msg) throw new Error("Message not found");
+    if (msg.sender_type !== "user" || msg.sender_user_id !== context.userId) {
+      throw new Error("Forbidden: you can only delete your own messages");
+    }
+    const paths: string[] = ((msg.attachments ?? []) as Array<{ path?: string }>)
+      .map((a) => a?.path ?? "")
+      .filter(Boolean);
+    if (paths.length > 0) {
+      try {
+        await asAny(supabaseAdmin).storage.from("chat-attachments").remove(paths);
+      } catch {
+        /* non-blocking */
+      }
+    }
+    const { error } = await asAny(supabaseAdmin)
+      .from("live_chat_messages")
+      .delete()
+      .eq("id", data.message_id);
+    if (error) throw new Error(error.message);
+    return { ok: true, conversation_id: msg.conversation_id as string };
+  });
+
+
 export const adminDeleteConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => conversationIdSchema.parse(input))

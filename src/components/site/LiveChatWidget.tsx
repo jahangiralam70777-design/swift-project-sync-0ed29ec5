@@ -14,9 +14,27 @@ import {
   Bot,
   Sparkles,
   Trash2,
+  MoreVertical,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   getChatSettings,
   listMyConversations,
@@ -25,10 +43,12 @@ import {
   userSendMessage,
   userMarkRead,
   userHideConversation,
+  userDeleteMessage,
   type ChatConversation,
   type ChatMessage,
   type ChatSettings,
 } from "@/lib/live-chat.functions";
+
 
 const LAUNCHER_ICONS: Record<string, LucideIcon> = {
   "message-circle": MessageCircle,
@@ -122,6 +142,9 @@ export function LiveChatWidget() {
   const sendMsg = useServerFn(userSendMessage);
   const markRead = useServerFn(userMarkRead);
   const hideConv = useServerFn(userHideConversation);
+  const deleteMsg = useServerFn(userDeleteMessage);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
 
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -158,6 +181,29 @@ export function LiveChatWidget() {
     },
     onSettled: refreshConversations,
   });
+
+  const deleteMsgMut = useMutation({
+    mutationFn: (message_id: string) => deleteMsg({ data: { message_id } }),
+    onMutate: async (message_id: string) => {
+      const key = ["chat", "messages", activeConvId] as const;
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<ChatMessage[]>(key);
+      qc.setQueryData<ChatMessage[]>(key, (old) => (old ?? []).filter((m) => m.id !== message_id));
+      return { prev, key };
+    },
+    onError: (err, _id, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ctx.key, ctx.prev);
+      toast.error(err instanceof Error ? err.message : "Failed to delete message");
+    },
+    onSuccess: () => {
+      toast.success("Message deleted");
+      refreshConversations();
+    },
+    onSettled: () => {
+      setPendingDeleteId(null);
+    },
+  });
+
 
   // Auth gate
   useEffect(() => {
@@ -330,7 +376,26 @@ export function LiveChatWidget() {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "live_chat_messages" },
+        (payload) => {
+          const oldRow = payload.old as Partial<ChatMessage> | null;
+          const deletedId = oldRow?.id;
+          if (!deletedId) return;
+          // Remove from any cached thread we have.
+          const caches = qc.getQueriesData<ChatMessage[]>({ queryKey: ["chat", "messages"] });
+          for (const [key, data] of caches) {
+            if (!data) continue;
+            if (data.some((m) => m.id === deletedId)) {
+              qc.setQueryData<ChatMessage[]>(key, data.filter((m) => m.id !== deletedId));
+            }
+          }
+          refreshConversations();
+        },
+      )
       .subscribe();
+
     return () => {
       supabase.removeChannel(ch);
     };
@@ -661,11 +726,34 @@ export function LiveChatWidget() {
 
                 {(messagesQ.data ?? []).map((m) => {
                   const isUser = m.sender_type === "user";
+                  const isOwn = isUser && !!userId && m.sender_user_id === userId;
                   return (
                     <div
                       key={m.id}
-                      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                      className={`group/msg flex items-start gap-1 ${isUser ? "justify-end" : "justify-start"}`}
                     >
+                      {isOwn && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label="Message options"
+                            className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted focus:opacity-100 group-hover/msg:opacity-100 data-[state=open]:opacity-100 sm:opacity-0"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" side="top">
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                setPendingDeleteId(m.id);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                       <div
                         className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                           isUser
@@ -688,6 +776,37 @@ export function LiveChatWidget() {
                   );
                 })}
               </div>
+
+              <AlertDialog
+                open={pendingDeleteId !== null}
+                onOpenChange={(o) => {
+                  if (!o && !deleteMsgMut.isPending) setPendingDeleteId(null);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently remove the message for everyone in this conversation.
+                      This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleteMsgMut.isPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={deleteMsgMut.isPending}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (pendingDeleteId) deleteMsgMut.mutate(pendingDeleteId);
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMsgMut.isPending ? "Deleting…" : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
 
               <div className="border-t border-border bg-card px-3 py-2">
                 <div className="flex items-end gap-2">
