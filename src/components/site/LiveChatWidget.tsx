@@ -142,6 +142,9 @@ export function LiveChatWidget() {
   const sendMsg = useServerFn(userSendMessage);
   const markRead = useServerFn(userMarkRead);
   const hideConv = useServerFn(userHideConversation);
+  const deleteMsg = useServerFn(userDeleteMessage);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
 
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
